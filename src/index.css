@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* CFA helpers */
+@layer base {
+  :root {
+    --cfa-blue: #4476FF;
+    --cfa-dark: #06005A;
+  }
+}
+
+/* Hide number input spinners */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
