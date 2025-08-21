@@ -208,8 +208,6 @@ function buildDividendSeries({ D0 = 5, required = 0.1, gConst = 0.05, gShort = 0
   return { data, priceNoGrowth, priceGordon, priceTwoStage };
 }
 
-
-
 /* -------------------------------------------------------------------------- */
 /*                                   App                                      */
 /* -------------------------------------------------------------------------- */
@@ -226,91 +224,93 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Content */}
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
-        {/* Dividends */}
         <Card title="Dividend Discount Models">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div>
-              <h3 className="font-georgia text-cfa-blue mb-2">Inputs</h3>
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <InlineRow label="Current Dividend, D₀"><CurrencyField value={D0} onChange={setD0} /></InlineRow>
-                <InlineRow label="Required Return (r)"><PercentField value={req} onChange={setReq} /></InlineRow>
-                <InlineRow label="Constant Growth g"><PercentField value={gConst} onChange={setGConst} /></InlineRow>
-                <InlineRow label="gShort"><PercentField value={gShort} onChange={setGShort} /></InlineRow>
-                <InlineRow label="gLong"><PercentField value={gLong} onChange={setGLong} /></InlineRow>
-                <InlineRow label="Short-Term Years (T)"><IntField value={shortYears} onChange={setShortYears} /></InlineRow>
-
-                <div className="h-px bg-gray-200 my-3" />
-                <div className="text-sm text-gray-700 font-arial space-y-1">
-                  <p><strong>No-growth price:</strong> {fmtUSD(divs.priceNoGrowth)}</p>
-                  <p><strong>Gordon price:</strong> {isNaN(divs.priceGordon) ? <span className="text-red-600">Requires g &lt; r</span> : fmtUSD(divs.priceGordon)}</p>
-                  <p><strong>Two-stage price:</strong> {isNaN(divs.priceTwoStage) ? <span className="text-red-600">Requires g₂ &lt; r</span> : fmtUSD(divs.priceTwoStage)}</p>
-                </div>
+          {/* Inputs Section - Full Width */}
+          <div className="mb-6">
+            <h3 className="font-georgia text-cfa-blue mb-3">Inputs</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <InlineRow label="Current Dividend, D₀"><CurrencyField value={D0} onChange={setD0} /></InlineRow>
+              <InlineRow label="Required Return (r)"><PercentField value={req} onChange={setReq} /></InlineRow>
+              <InlineRow label="Constant Growth g"><PercentField value={gConst} onChange={setGConst} /></InlineRow>
+              <InlineRow label="gShort"><PercentField value={gShort} onChange={setGShort} /></InlineRow>
+              <InlineRow label="gLong"><PercentField value={gLong} onChange={setGLong} /></InlineRow>
+              <InlineRow label="Short-Term Years (T)"><IntField value={shortYears} onChange={setShortYears} /></InlineRow>
+            </div>
+            
+            {/* Results Section */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700 font-arial">
+              <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <p><strong>No-growth price:</strong> {fmtUSD(divs.priceNoGrowth)}</p>
+              </div>
+              <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <p><strong>Gordon price:</strong> {isNaN(divs.priceGordon) ? <span className="text-red-600">Requires g &lt; r</span> : fmtUSD(divs.priceGordon)}</p>
+              </div>
+              <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <p><strong>Two-stage price:</strong> {isNaN(divs.priceTwoStage) ? <span className="text-red-600">Requires g₂ &lt; r</span> : fmtUSD(divs.priceTwoStage)}</p>
               </div>
             </div>
+          </div>
 
-            <div className="lg:col-span-2">
-              <div className="rounded-xl border border-gray-200 bg-white p-3">
-                <div style={{ height: 360 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={divs.data} margin={CHART_MARGINS}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="yearLabel" 
-                        tickMargin={8} 
-                        label={{ value: "Years", position: "insideBottom", offset: -20 }}
-                        type="category"
-                      />
-                      <YAxis tickFormatter={fmtUSD} width={80} />
-                      <Tooltip 
-                        formatter={(value, name) => {
-                          if (value === null) return ['N/A', name];
-                          return [fmtUSD(Math.abs(value)), name];
-                        }}
-                        labelFormatter={(label) => `Year ${label}`}
-                        contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} 
-                      />
-                      <Legend verticalAlign="top" align="right" height={36} wrapperStyle={{ paddingBottom: 6 }} />
-                      <Bar dataKey="constDiv" name="Constant Dividend" fill={CFA.dark}>
-                        <LabelList 
-                          dataKey="constDiv"
-                          position="top"
-                          formatter={(value) => value > 0 ? fmtUSD(value) : ''}
-                          style={{ fontSize: '9px', fontWeight: '500', fill: '#374151' }}
-                          offset={5}
-                        />
-                      </Bar>
-                      <Bar dataKey="constGrow" name="Constant Growth" fill={CFA.primary}>
-                        <LabelList 
-                          dataKey="constGrow"
-                          position="top"
-                          formatter={(value) => value > 0 ? fmtUSD(value) : ''}
-                          style={{ fontSize: '9px', fontWeight: '500', fill: '#374151' }}
-                          offset={15}
-                        />
-                      </Bar>
-                      <Bar dataKey="twoStage" name="Two‑Stage Growth" fill="#9CA3AF">
-                        <LabelList 
-                          dataKey="twoStage"
-                          position="top"
-                          formatter={(value) => value > 0 ? fmtUSD(value) : ''}
-                          style={{ fontSize: '9px', fontWeight: '500', fill: '#374151' }}
-                          offset={25}
-                        />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-3 space-y-1">
-                  <p className="text-xs text-gray-600 font-arial">
-                    <strong>Important:</strong> Dividend cash flows shown for years 1-10 only. All models assume dividends continue to infinity beyond year 10.
-                  </p>
-                  <p className="text-xs text-gray-600 font-arial">
-                    Negative bars at year 0 represent initial investment cost (present value). Positive bars show projected annual dividends.
-                  </p>
-                </div>
-              </div>
+          {/* Chart Section - Full Width */}
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <div style={{ height: 400 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={divs.data} margin={CHART_MARGINS}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="yearLabel" 
+                    tickMargin={8} 
+                    label={{ value: "Years", position: "insideBottom", offset: -20 }}
+                    type="category"
+                  />
+                  <YAxis tickFormatter={fmtUSD} width={80} />
+                  <Tooltip 
+                    formatter={(value, name) => {
+                      if (value === null) return ['N/A', name];
+                      return [fmtUSD(Math.abs(value)), name];
+                    }}
+                    labelFormatter={(label) => `Year ${label}`}
+                    contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} 
+                  />
+                  <Legend verticalAlign="top" align="right" height={36} wrapperStyle={{ paddingBottom: 6 }} />
+                  <Bar dataKey="constDiv" name="Constant Dividend" fill={CFA.dark}>
+                    <LabelList 
+                      dataKey="constDiv"
+                      position="top"
+                      formatter={(value) => value > 0 ? fmtUSD(value) : ''}
+                      style={{ fontSize: '9px', fontWeight: '500', fill: '#374151' }}
+                      offset={5}
+                    />
+                  </Bar>
+                  <Bar dataKey="constGrow" name="Constant Growth" fill={CFA.primary}>
+                    <LabelList 
+                      dataKey="constGrow"
+                      position="top"
+                      formatter={(value) => value > 0 ? fmtUSD(value) : ''}
+                      style={{ fontSize: '9px', fontWeight: '500', fill: '#374151' }}
+                      offset={15}
+                    />
+                  </Bar>
+                  <Bar dataKey="twoStage" name="Two‑Stage Growth" fill="#9CA3AF">
+                    <LabelList 
+                      dataKey="twoStage"
+                      position="top"
+                      formatter={(value) => value > 0 ? fmtUSD(value) : ''}
+                      style={{ fontSize: '9px', fontWeight: '500', fill: '#374151' }}
+                      offset={25}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-4 space-y-1">
+              <p className="text-xs text-gray-600 font-arial">
+                <strong>Important:</strong> Dividend cash flows shown for years 1-10 only. All models assume dividends continue to infinity beyond year 10.
+              </p>
+              <p className="text-xs text-gray-600 font-arial">
+                Negative bars at year 0 represent initial investment cost (present value). Positive bars show projected annual dividends.
+              </p>
             </div>
           </div>
         </Card>
