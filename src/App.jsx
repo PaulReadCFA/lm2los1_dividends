@@ -1,5 +1,4 @@
-import React, { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -12,309 +11,472 @@ import {
   LabelList,
 } from "recharts";
 
-/**
- * CFA Institute – Quantitative Methods: LOS 1
- * 1) Coupon Bond Cash Flows & Price
- * 2) Mortgage Amortization (stacked Interest + Principal)
- * 3) Dividend Discount Models (no growth, Gordon, two-stage)
- */
+const fmtUSD = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(x);
 
-const CHART_MARGINS = { top: 60, right: 12, left: 72, bottom: 36 };
-
-// ---- CFA palette & helpers ----
-const CFA = { primary: "#4476FF", dark: "#06005A" };
-const fmtUSD = (x) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(x);
-const round2 = (x) => Math.round((x + Number.EPSILON) * 100) / 100;
-
-/* -------------------------------------------------------------------------- */
-/*                             Compact calculator UI                           */
-/* -------------------------------------------------------------------------- */
-
-const Card = ({ title, children }) => (
-  <section className="bg-white rounded-2xl shadow-md border border-gray-200">
-    <header className="px-6 pt-6 pb-3 border-b border-gray-100">
-      <h2 className="text-2xl font-georgia text-cfa-dark">{title}</h2>
-    </header>
-    <div className="p-6">{children}</div>
-  </section>
-);
-
-// Label left, compact input(s) right
-const InlineRow = ({ label, children }) => (
-  <div className="flex items-center gap-4 py-1.5">
-    <label className="grow text-sm font-arial text-gray-700">{label}</label>
-    <div className="shrink-0 flex items-center gap-2">{children}</div>
+// Accessible input component following required patterns
+const FormField = ({ id, label, error, helpText, required, children }) => (
+  <div className="mb-4">
+    <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+      {label}
+      {required && <span className="text-red-500 ml-1" aria-label="required">*</span>}
+    </label>
+    {children}
+    {helpText && (
+      <p id={`${id}-help`} className="mt-1 text-xs text-gray-600">
+        {helpText}
+      </p>
+    )}
+    {error && (
+      <div id={`${id}-error`} className="mt-1 text-xs text-red-600" role="alert">
+        {error}
+      </div>
+    )}
   </div>
 );
 
-// Base input: fixed width, readable text/caret
-const InputBase = ({ className = "", style, ...props }) => (
-  <input
-    {...props}
-    className={
-      "shrink-0 w-32 rounded-lg border border-gray-300 bg-white px-3 py-1.5 " +
-      "text-right text-sm text-gray-900 caret-cfa-blue font-arial shadow-sm " +
-      "focus:outline-none focus:ring-2 focus:ring-cfa-blue/40 focus:border-cfa-blue " +
-      className
-    }
-    style={{ width: "8rem", ...style }}
-  />
-);
+const NumericInput = ({ id, value, onChange, min, max, step = 0.01, prefix = "", suffix = "", error, helpText }) => {
+  const describedBy = [
+    helpText ? `${id}-help` : null,
+    error ? `${id}-error` : null
+  ].filter(Boolean).join(' ');
 
-// Handles $/% adornment without blocking caret; adds padding automatically
-function InputWithAdorn({ left, right, inputClassName = "", ...props }) {
-  const padLeft = left ? "pl-6" : "";
-  const padRight = right ? "pr-8" : ""; // reserve space so text/caret never sit under adorn
+  const handleFocus = (e) => {
+    e.target.select(); // Select all text when focused
+  };
+
   return (
-    <div className="relative shrink-0">
-      {left && (
-        <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-gray-500 text-sm font-arial">
-          {left}
-        </span>
-      )}
-      <InputBase {...props} className={`${padLeft} ${padRight} ${inputClassName}`} />
-      {right && (
-        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-500 text-sm font-arial">
-          {right}
-        </span>
-      )}
+    <div className="relative">
+      {prefix && <span className="absolute left-2 top-2 text-gray-500 pointer-events-none">{prefix}</span>}
+      <input
+        id={id}
+        type="number"
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+        onFocus={handleFocus}
+        min={min}
+        max={max}
+        step={step}
+        className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none ${
+          prefix ? 'pl-6' : ''
+        } ${suffix ? 'pr-8' : ''} ${
+          error ? 'border-red-300' : 'border-gray-300'
+        }`}
+        aria-describedby={describedBy || undefined}
+        aria-invalid={error ? 'true' : 'false'}
+      />
+      {suffix && <span className="absolute right-2 top-2 text-gray-500 pointer-events-none">{suffix}</span>}
     </div>
   );
-}
+};
 
-// Currency ($ shown, stores raw number)
-function CurrencyField({ value, onChange }) {
-  const display = Number.isFinite(value) ? value.toFixed(2) : "";
-  return (
-    <InputWithAdorn
-      left="$"
-      type="text"
-      inputMode="decimal"
-      value={display}
-      onChange={(e) => {
-        const v = parseFloat(e.target.value);
-        onChange(Number.isFinite(v) ? v : 0);
-      }}
-      onBlur={(e) => {
-        const v = parseFloat(e.target.value);
-        e.target.value = Number.isFinite(v) ? v.toFixed(2) : "0.00";
-        onChange(Number.isFinite(v) ? v : 0);
-      }}
-      placeholder="0.00"
-    />
-  );
-}
-
-// Percent (% shown, stores decimal 0–1)
-function PercentField({ value, onChange }) {
-  const display = Number.isFinite(value) ? (value * 100).toFixed(2) : "";
-  return (
-    <InputWithAdorn
-      right="%"
-      type="text"
-      inputMode="decimal"
-      value={display}
-      onChange={(e) => {
-        const v = parseFloat(e.target.value);
-        onChange(Number.isFinite(v) ? v / 100 : 0);
-      }}
-      onBlur={(e) => {
-        const v = parseFloat(e.target.value);
-        e.target.value = Number.isFinite(v) ? v.toFixed(2) : "0.00";
-        onChange(Number.isFinite(v) ? v / 100 : 0);
-      }}
-      placeholder="0.00"
-    />
-  );
-}
-
-// Integer years / frequency
-function IntField({ value, onChange }) {
-  const display = Number.isFinite(value) ? String(value) : "";
-  return (
-    <InputBase
-      type="text"
-      inputMode="numeric"
-      pattern="[0-9]*"
-      value={display}
-      onChange={(e) => {
-        const v = parseInt(e.target.value, 10);
-        onChange(Number.isFinite(v) ? v : 0);
-      }}
-      onBlur={(e) => {
-        const v = parseInt(e.target.value, 10);
-        e.target.value = Number.isFinite(v) ? String(v) : "0";
-        onChange(Number.isFinite(v) ? v : 0);
-      }}
-      placeholder="0"
-    />
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*                                Calculations                                */
-/* -------------------------------------------------------------------------- */
-
-// Dividend cash flows + values - Enhanced to include initial outflows
-function buildDividendSeries({ D0 = 5, required = 0.1, gConst = 0.05, gShort = 0.05, gLong = 0.03, shortYears = 5, horizonYears = 10 }) {
-  const constGrowth = [];
-  let Dt = D0 * (1 + gConst);
-  for (let t = 1; t <= horizonYears; t++) {
-    if (t > 1) Dt *= 1 + gConst;
-    constGrowth.push({ year: t, constGrow: Dt });
-  }
-  const twoStage = [];
-  Dt = D0 * (1 + gShort);
-  for (let t = 1; t <= horizonYears; t++) {
-    if (t > 1) {
-      const g = t <= shortYears ? gShort : gLong;
-      Dt *= 1 + g;
+// Calculation function
+function buildDividendSeries({ D0 = 5, required = 0.1, gConst = 0.05, gShort = 0.05, gLong = 0.03, shortYears = 5 }) {
+  const horizonYears = 10;
+  
+  // Validation
+  const errors = {};
+  if (gConst >= required) errors.gConst = "Growth rate must be less than required return";
+  if (gLong >= required) errors.gLong = "Long-term growth must be less than required return";
+  if (D0 <= 0) errors.D0 = "Dividend must be positive";
+  if (required <= 0) errors.required = "Required return must be positive";
+  
+  // Constant dividend model
+  const priceNoGrowth = required > 0 ? D0 / required : NaN;
+  
+  // Constant growth dividend model
+  const priceConstantGrowth = (gConst < required && gConst >= 0) ? (D0 * (1 + gConst)) / (required - gConst) : NaN;
+  
+  // Changing growth dividend model
+  let priceChangingGrowth = NaN;
+  if (gLong < required && gLong >= 0 && gShort >= 0) {
+    let pvHighGrowth = 0;
+    for (let t = 1; t <= shortYears; t++) {
+      const dividend = D0 * Math.pow(1 + gShort, t);
+      pvHighGrowth += dividend / Math.pow(1 + required, t);
     }
-    twoStage.push({ year: t, twoStage: Dt });
+    
+    const terminalDividend = D0 * Math.pow(1 + gShort, shortYears) * (1 + gLong);
+    const terminalValue = terminalDividend / (required - gLong);
+    const pvTerminalValue = terminalValue / Math.pow(1 + required, shortYears);
+    
+    priceChangingGrowth = pvHighGrowth + pvTerminalValue;
   }
 
-  // Calculate prices
-  const priceNoGrowth = D0 / required;
-  const priceGordon = gConst < required ? (D0 * (1 + gConst)) / (required - gConst) : NaN;
-
-  const cf1 = Array.from({ length: shortYears }, (_, k) =>
-    (D0 * Math.pow(1 + gShort, k + 1)) / Math.pow(1 + required, k + 1)
-  ).reduce((a, b) => a + b, 0);
-
-  const D_T1 = D0 * Math.pow(1 + gShort, shortYears) * (1 + gLong);
-  const TV = gLong < required ? D_T1 / (required - gLong) : NaN;
-  const pvTV = TV / Math.pow(1 + required, shortYears);
-  const priceTwoStage = cf1 + pvTV;
-
-  // Build data with initial outflows at year 0
+  // Build chart data
   const data = [
     {
       year: 0,
       yearLabel: "0",
       constDiv: -priceNoGrowth,
-      constGrow: isNaN(priceGordon) ? null : -priceGordon,
-      twoStage: isNaN(priceTwoStage) ? null : -priceTwoStage,
-    },
-    ...Array.from({ length: horizonYears }, (_, idx) => ({
-      year: idx + 1,
-      yearLabel: (idx + 1).toString(),
-      constDiv: D0,
-      constGrow: constGrowth[idx].constGrow,
-      twoStage: twoStage[idx].twoStage,
-    }))
+      constGrow: isNaN(priceConstantGrowth) ? null : -priceConstantGrowth,
+      changingGrowth: isNaN(priceChangingGrowth) ? null : -priceChangingGrowth,
+    }
   ];
 
-  return { data, priceNoGrowth, priceGordon, priceTwoStage };
+  for (let year = 1; year <= horizonYears; year++) {
+    const constDiv = D0;
+    const constGrow = isNaN(priceConstantGrowth) ? null : D0 * Math.pow(1 + gConst, year);
+    
+    let changingGrowthDiv = null;
+    if (!isNaN(priceChangingGrowth)) {
+      if (year <= shortYears) {
+        changingGrowthDiv = D0 * Math.pow(1 + gShort, year);
+      } else {
+        changingGrowthDiv = D0 * Math.pow(1 + gShort, shortYears) * Math.pow(1 + gLong, year - shortYears);
+      }
+    }
+
+    data.push({
+      year,
+      yearLabel: year.toString(),
+      constDiv,
+      constGrow,
+      changingGrowth: changingGrowthDiv,
+    });
+  }
+
+  return { data, priceNoGrowth, priceConstantGrowth, priceChangingGrowth, errors };
 }
 
-/* -------------------------------------------------------------------------- */
-/*                                   App                                      */
-/* -------------------------------------------------------------------------- */
-
-export default function App() {
-  // Dividend state
+export default function AccessibleDividendCalculator() {
   const [D0, setD0] = useState(5);
-  const [req, setReq] = useState(0.1);
-  const [gConst, setGConst] = useState(0.05);
-  const [gShort, setGShort] = useState(0.05);
-  const [gLong, setGLong] = useState(0.03);
+  const [req, setReq] = useState(10);
+  const [gConst, setGConst] = useState(5);
+  const [gShort, setGShort] = useState(5);
+  const [gLong, setGLong] = useState(3);
   const [shortYears, setShortYears] = useState(5);
-  const divs = useMemo(() => buildDividendSeries({ D0, required: req, gConst, gShort, gLong, shortYears, horizonYears: 10 }), [D0, req, gConst, gShort, gLong, shortYears]);
+
+  const results = useMemo(() => {
+    return buildDividendSeries({
+      D0,
+      required: req / 100,
+      gConst: gConst / 100,
+      gShort: gShort / 100,
+      gLong: gLong / 100,
+      shortYears
+    });
+  }, [D0, req, gConst, gShort, gLong, shortYears]);
+
+  const hasErrors = Object.keys(results.errors).length > 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
-        <Card title="Dividend Discount Models">
-          {/* Inputs Section - Full Width */}
-          <div className="mb-6">
-            <h3 className="font-georgia text-cfa-blue mb-3">Inputs</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <InlineRow label="Current Dividend, D₀"><CurrencyField value={D0} onChange={setD0} /></InlineRow>
-              <InlineRow label="Required Return (r)"><PercentField value={req} onChange={setReq} /></InlineRow>
-              <InlineRow label="Constant Growth g"><PercentField value={gConst} onChange={setGConst} /></InlineRow>
-              <InlineRow label="gShort"><PercentField value={gShort} onChange={setGShort} /></InlineRow>
-              <InlineRow label="gLong"><PercentField value={gLong} onChange={setGLong} /></InlineRow>
-              <InlineRow label="Short-Term Years (T)"><IntField value={shortYears} onChange={setShortYears} /></InlineRow>
-            </div>
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="max-w-6xl mx-auto">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dividend Discount Models</h1>
+          <p className="text-gray-600">
+            Compare valuations using Constant Dividend, Constant Growth Dividend, and Changing Growth Dividend models
+          </p>
+        </header>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Inputs */}
+          <section className="bg-white p-6 rounded-lg shadow" aria-labelledby="parameters-heading">
+            <h2 id="parameters-heading" className="text-lg font-semibold mb-4">Model Parameters</h2>
             
-            {/* Results Section */}
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700 font-arial">
-              <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <p><strong>No-growth price:</strong> {fmtUSD(divs.priceNoGrowth)}</p>
-              </div>
-              <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <p><strong>Gordon price:</strong> {isNaN(divs.priceGordon) ? <span className="text-red-600">Requires g &lt; r</span> : fmtUSD(divs.priceGordon)}</p>
-              </div>
-              <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <p><strong>Two-stage price:</strong> {isNaN(divs.priceTwoStage) ? <span className="text-red-600">Requires g₂ &lt; r</span> : fmtUSD(divs.priceTwoStage)}</p>
-              </div>
-            </div>
-          </div>
+            <FormField
+              id="current-dividend"
+              label="Current Dividend (D₀)"
+              helpText="Most recent annual dividend payment per share"
+              required
+              error={results.errors.D0}
+            >
+              <NumericInput
+                id="current-dividend"
+                value={D0}
+                onChange={setD0}
+                min={0.01}
+                max={1000}
+                step={0.1}
+                prefix="$"
+                error={results.errors.D0}
+                helpText="Most recent annual dividend payment per share"
+              />
+            </FormField>
+            
+            <FormField
+              id="required-return"
+              label="Required Return"
+              helpText="Investor's minimum acceptable rate of return"
+              required
+              error={results.errors.required}
+            >
+              <NumericInput
+                id="required-return"
+                value={req}
+                onChange={setReq}
+                min={0.1}
+                max={50}
+                step={0.1}
+                suffix="%"
+                error={results.errors.required}
+                helpText="Investor's minimum acceptable rate of return"
+              />
+            </FormField>
+            
+            <FormField
+              id="constant-growth"
+              label="Constant Growth Rate"
+              helpText="Expected annual dividend growth rate (Constant Growth Dividend model)"
+              error={results.errors.gConst}
+            >
+              <NumericInput
+                id="constant-growth"
+                value={gConst}
+                onChange={setGConst}
+                min={-10}
+                max={25}
+                step={0.1}
+                suffix="%"
+                error={results.errors.gConst}
+                helpText="Expected annual dividend growth rate (Constant Growth Dividend model)"
+              />
+            </FormField>
+            
+            <FormField
+              id="short-term-growth"
+              label="Short-term Growth Rate"
+              helpText="Higher growth rate for initial years (Changing Growth Dividend model)"
+            >
+              <NumericInput
+                id="short-term-growth"
+                value={gShort}
+                onChange={setGShort}
+                min={-10}
+                max={50}
+                step={0.1}
+                suffix="%"
+                helpText="Higher growth rate for initial years (Changing Growth Dividend model)"
+              />
+            </FormField>
+            
+            <FormField
+              id="long-term-growth"
+              label="Long-term Growth Rate"
+              helpText="Sustainable growth rate after high-growth period"
+              error={results.errors.gLong}
+            >
+              <NumericInput
+                id="long-term-growth"
+                value={gLong}
+                onChange={setGLong}
+                min={-5}
+                max={15}
+                step={0.1}
+                suffix="%"
+                error={results.errors.gLong}
+                helpText="Sustainable growth rate after high-growth period"
+              />
+            </FormField>
+            
+            <FormField
+              id="high-growth-years"
+              label="High Growth Period (Years)"
+              helpText="Number of years of high growth before transitioning"
+            >
+              <NumericInput
+                id="high-growth-years"
+                value={shortYears}
+                onChange={setShortYears}
+                min={1}
+                max={20}
+                step={1}
+                helpText="Number of years of high growth before transitioning"
+              />
+            </FormField>
+          </section>
 
-          {/* Chart Section - Full Width */}
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <div style={{ height: 400 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={divs.data} margin={CHART_MARGINS}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="yearLabel" 
-                    tickMargin={8} 
-                    label={{ value: "Years", position: "insideBottom", offset: -20 }}
-                    type="category"
-                  />
-                  <YAxis tickFormatter={fmtUSD} width={80} />
-                  <Tooltip 
-                    formatter={(value, name) => {
-                      if (value === null) return ['N/A', name];
-                      return [fmtUSD(Math.abs(value)), name];
-                    }}
-                    labelFormatter={(label) => `Year ${label}`}
-                    contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }} 
-                  />
-                  <Legend verticalAlign="top" align="right" height={36} wrapperStyle={{ paddingBottom: 6 }} />
-                  <Bar dataKey="constDiv" name="Constant Dividend" fill={CFA.dark}>
-                    <LabelList 
-                      dataKey="constDiv"
-                      position="top"
-                      formatter={(value) => value > 0 ? fmtUSD(value) : ''}
-                      style={{ fontSize: '9px', fontWeight: '500', fill: '#374151' }}
-                      offset={5}
-                    />
-                  </Bar>
-                  <Bar dataKey="constGrow" name="Constant Growth" fill={CFA.primary}>
-                    <LabelList 
-                      dataKey="constGrow"
-                      position="top"
-                      formatter={(value) => value > 0 ? fmtUSD(value) : ''}
-                      style={{ fontSize: '9px', fontWeight: '500', fill: '#374151' }}
-                      offset={15}
-                    />
-                  </Bar>
-                  <Bar dataKey="twoStage" name="Two‑Stage Growth" fill="#9CA3AF">
-                    <LabelList 
-                      dataKey="twoStage"
-                      position="top"
-                      formatter={(value) => value > 0 ? fmtUSD(value) : ''}
-                      style={{ fontSize: '9px', fontWeight: '500', fill: '#374151' }}
-                      offset={25}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-4 space-y-1">
-              <p className="text-xs text-gray-600 font-arial">
-                <strong>Important:</strong> Dividend cash flows shown for years 1-10 only. All models assume dividends continue to infinity beyond year 10.
+          {/* Results and Chart */}
+          <div className="lg:col-span-3 space-y-6">
+            
+            {/* Error Display */}
+            {hasErrors && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4" role="alert">
+                <h3 className="text-red-800 font-medium mb-2">Input Validation Errors:</h3>
+                <ul className="text-red-700 text-sm list-disc list-inside space-y-1">
+                  {Object.values(results.errors).map((error, i) => (
+                    <li key={i}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Results */}
+            <section className="bg-white p-6 rounded-lg shadow" aria-labelledby="results-heading">
+              <h2 id="results-heading" className="text-lg font-semibold mb-4">Valuation Results</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600" aria-label={`Constant Dividend model value: ${fmtUSD(results.priceNoGrowth)}`}>
+                    {isFinite(results.priceNoGrowth) ? fmtUSD(results.priceNoGrowth) : "Invalid"}
+                  </div>
+                  <div className="text-sm text-gray-600">Constant Dividend Model</div>
+                  <div className="text-xs text-gray-500 mt-1">P = D₀ ÷ r</div>
+                </div>
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600" aria-label={`Constant Growth Dividend model value: ${isNaN(results.priceConstantGrowth) ? "Invalid" : fmtUSD(results.priceConstantGrowth)}`}>
+                    {isNaN(results.priceConstantGrowth) ? "Invalid" : fmtUSD(results.priceConstantGrowth)}
+                  </div>
+                  <div className="text-sm text-gray-600">Constant Growth Dividend Model</div>
+                  <div className="text-xs text-gray-500 mt-1">P = D₁ ÷ (r - g)</div>
+                </div>
+                <div className="text-center p-4 bg-purple-50 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600" aria-label={`Changing Growth Dividend model value: ${isNaN(results.priceChangingGrowth) ? "Invalid" : fmtUSD(results.priceChangingGrowth)}`}>
+                    {isNaN(results.priceChangingGrowth) ? "Invalid" : fmtUSD(results.priceChangingGrowth)}
+                  </div>
+                  <div className="text-sm text-gray-600">Changing Growth Dividend Model</div>
+                  <div className="text-xs text-gray-500 mt-1">High growth + Terminal value</div>
+                </div>
+              </div>
+            </section>
+
+            {/* Accessible Data Table (Screen Reader Only) */}
+            <div className="sr-only">
+              <h3 id="data-table-title">Cash Flow Data Table</h3>
+              <p id="data-table-description">
+                Annual dividend projections and initial investment costs for each valuation model over 10 years
               </p>
-              <p className="text-xs text-gray-600 font-arial">
-                Negative bars at year 0 represent initial investment cost (present value). Positive bars show projected annual dividends.
-              </p>
+              <table>
+                <caption>Dividend cash flows by year and model</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Year</th>
+                    <th scope="col" className="text-right">Constant Dividend</th>
+                    <th scope="col" className="text-right">Constant Growth Dividend</th>
+                    <th scope="col" className="text-right">Changing Growth Dividend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.data.map(row => (
+                    <tr key={row.year}>
+                      <th scope="row">{row.year === 0 ? "Initial Investment" : `Year ${row.year}`}</th>
+                      <td className="text-right">
+                        {row.year === 0 
+                          ? fmtUSD(Math.abs(row.constDiv)) + " (outflow)"
+                          : fmtUSD(row.constDiv)
+                        }
+                      </td>
+                      <td className="text-right">
+                        {row.constGrow === null 
+                          ? "Invalid model" 
+                          : row.year === 0 
+                            ? fmtUSD(Math.abs(row.constGrow)) + " (outflow)"
+                            : fmtUSD(row.constGrow)
+                        }
+                      </td>
+                      <td className="text-right">
+                        {row.changingGrowth === null 
+                          ? "Invalid model" 
+                          : row.year === 0 
+                            ? fmtUSD(Math.abs(row.changingGrowth)) + " (outflow)"
+                            : fmtUSD(row.changingGrowth)
+                        }
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+
+            {/* Chart */}
+            <section className="bg-white p-6 rounded-lg shadow" aria-labelledby="chart-title">
+              <h2 id="chart-title" className="text-lg font-semibold mb-2">Equity Cash Flows (in US$) for Different Dividend Models</h2>
+              <p className="text-sm text-gray-600 mb-4">(Only the first 10 years are shown)</p>
+              
+              {/* Legend above chart */}
+              <div className="mb-4 flex flex-wrap gap-6 justify-center text-sm">
+                <span className="inline-flex items-center">
+                  <span className="w-4 h-4 bg-blue-600 mr-2 rounded"></span>
+                  Constant Dividend
+                </span>
+                <span className="inline-flex items-center">
+                  <span className="w-4 h-4 bg-green-600 mr-2 rounded"></span>
+                  Constant Growth Dividend
+                </span>
+                <span className="inline-flex items-center">
+                  <span className="w-4 h-4 bg-purple-600 mr-2 rounded"></span>
+                  Changing Growth Dividend
+                </span>
+              </div>
+              
+              <div className="h-96 w-full" 
+                   role="img" 
+                   aria-labelledby="chart-title" 
+                   aria-describedby="chart-description">
+                
+                <div className="sr-only">
+                  <p id="chart-description">
+                    Bar chart showing dividend cash flows over 10 years. Year 0 shows negative initial investment costs. 
+                    Subsequent years show growing dividend payments for each model. 
+                    Constant Dividend model shows constant {fmtUSD(D0)} dividends. 
+                    Constant Growth Dividend shows dividends growing at {gConst}% annually. 
+                    Changing Growth Dividend shows {gShort}% growth for {shortYears} years, then {gLong}% thereafter.
+                  </p>
+                </div>
+                
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={results.data} margin={{ top: 50, right: 30, left: 20, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="yearLabel" 
+                      label={{ value: 'Years', position: 'insideBottom', offset: -5 }}
+                    />
+                    <YAxis 
+                      tickFormatter={fmtUSD}
+                    />
+                    <Tooltip 
+                      formatter={(value, name) => [
+                        value ? fmtUSD(Math.abs(value)) : 'Invalid', 
+                        name
+                      ]}
+                      labelFormatter={(label) => label === "0" ? "Initial Investment" : `Year ${label}`}
+                    />
+                    
+                    <Bar dataKey="constDiv" name="Constant Dividend" fill="#2563eb">
+                      <LabelList 
+                        dataKey="constDiv"
+                        position="top"
+                        formatter={(value) => value > 1 ? fmtUSD(value) : ''}
+                        style={{ fontSize: '8px' }}
+                        offset={5}
+                      />
+                    </Bar>
+                    
+                    <Bar dataKey="constGrow" name="Constant Growth Dividend" fill="#16a34a">
+                      <LabelList 
+                        dataKey="constGrow"
+                        position="top"
+                        formatter={(value) => value > 1 ? fmtUSD(value) : ''}
+                        style={{ fontSize: '8px' }}
+                        offset={20}
+                      />
+                    </Bar>
+                    
+                    <Bar dataKey="changingGrowth" name="Changing Growth Dividend" fill="#9333ea">
+                      <LabelList 
+                        dataKey="changingGrowth"
+                        position="top"
+                        formatter={(value) => value > 1 ? fmtUSD(value) : ''}
+                        style={{ fontSize: '8px' }}
+                        offset={35}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Educational Information */}
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <h3 className="font-semibold text-sm mb-2">Model Explanations:</h3>
+                <div className="text-xs text-gray-700 space-y-2">
+                  <p><strong>Constant Dividend Model:</strong> Assumes dividends remain constant. Appropriate for mature companies with stable payouts.</p>
+                  <p><strong>Constant Growth Dividend Model:</strong> Assumes constant dividend growth rate. Requires growth rate less than required return.</p>
+                  <p><strong>Changing Growth Dividend Model:</strong> Assumes high growth initially, then lower sustainable growth. More realistic for many companies.</p>
+                </div>
+              </div>
+            </section>
           </div>
-        </Card>
-      </main>
+        </div>
+      </div>
     </div>
   );
 }
