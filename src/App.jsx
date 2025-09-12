@@ -162,12 +162,7 @@ export default function AccessibleDividendCalculator() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dividend Discount Models</h1>
-          <p className="text-gray-600">
-            Compare valuations using Constant Dividend, Constant Growth Dividend, and Changing Growth Dividend models
-          </p>
-        </header>
+
         
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Inputs */}
