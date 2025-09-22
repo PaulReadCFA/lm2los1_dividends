@@ -6,7 +6,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   LabelList,
 } from "recharts";
@@ -67,6 +66,31 @@ const NumericInput = ({ id, value, onChange, min, max, step = 0.01, prefix = "",
       {suffix && <span className="absolute right-2 top-2 text-gray-500 pointer-events-none">{suffix}</span>}
     </div>
   );
+};
+
+// Model configurations
+const MODEL_CONFIG = {
+  constant: {
+    name: "Constant Dividend",
+    color: "#2563eb",
+    dataKey: "constDiv",
+    description: "Assumes dividends remain constant forever. Appropriate for mature companies with stable payouts.",
+    formula: "P = D₀ ÷ r"
+  },
+  growth: {
+    name: "Constant Growth Dividend", 
+    color: "#16a34a",
+    dataKey: "constGrow",
+    description: "Assumes constant dividend growth rate forever. Requires growth rate less than required return.",
+    formula: "P = D₁ ÷ (r - g)"
+  },
+  changing: {
+    name: "Changing Growth Dividend",
+    color: "#9333ea", 
+    dataKey: "changingGrowth",
+    description: "Assumes high growth initially, then lower sustainable growth. More realistic for many companies.",
+    formula: "High growth + Terminal value"
+  }
 };
 
 // Calculation function
@@ -139,6 +163,7 @@ export default function AccessibleDividendCalculator() {
   const [gShort, setGShort] = useState(5);
   const [gLong, setGLong] = useState(3);
   const [shortYears, setShortYears] = useState(5);
+  const [selectedModel, setSelectedModel] = useState("constant"); // Toggle state
 
   const results = useMemo(() => {
     return buildDividendSeries({
@@ -152,6 +177,19 @@ export default function AccessibleDividendCalculator() {
   }, [D0, req, gConst, gShort, gLong, shortYears]);
 
   const hasErrors = Object.keys(results.errors).length > 0;
+  
+  // Get current model configuration
+  const currentModel = MODEL_CONFIG[selectedModel];
+  
+  // Get price for current model
+  const getCurrentPrice = () => {
+    switch(selectedModel) {
+      case "constant": return results.priceNoGrowth;
+      case "growth": return results.priceConstantGrowth;
+      case "changing": return results.priceChangingGrowth;
+      default: return NaN;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
@@ -190,208 +228,176 @@ export default function AccessibleDividendCalculator() {
           <div className="lg:col-span-3 space-y-6">
             
             {hasErrors && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4" role="alert">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4" role="alert" aria-live="assertive">
                 <h3 className="text-red-800 font-medium mb-2">Input Validation Errors:</h3>
                 <ul className="text-red-700 text-sm list-disc list-inside space-y-1">
                   {Object.values(results.errors).map((error, i) => (
-                    <li key={i}>{error}</li>
+                    <li key={i} role="listitem">{error}</li>
                   ))}
                 </ul>
               </div>
             )}
 
-            {/* Results - Enhanced contrast */}
+            {/* Current Model Results */}
             <section className="bg-white p-6 rounded-lg shadow">
               <h2 className="text-lg font-semibold mb-4">Valuation Results</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-800">
-                    {isFinite(results.priceNoGrowth) ? fmtUSD(results.priceNoGrowth) : "Invalid"}
-                  </div>
-                  <div className="text-sm text-gray-700 font-medium">Constant Dividend Model</div>
-                  <div className="text-xs text-gray-600 mt-1">P = D₀ ÷ r</div>
+              <div className="text-center p-6 rounded-lg" style={{ backgroundColor: currentModel.color + '20' }}>
+                <div className="text-3xl font-bold mb-2" style={{ color: currentModel.color }} aria-live="polite" aria-label={`Current valuation: ${isFinite(getCurrentPrice()) ? fmtUSD(getCurrentPrice()) : "Invalid"}`}>
+                  {isFinite(getCurrentPrice()) ? fmtUSD(getCurrentPrice()) : "Invalid"}
                 </div>
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <div className="text-2xl font-bold text-green-800">
-                    {isNaN(results.priceConstantGrowth) ? "Invalid" : fmtUSD(results.priceConstantGrowth)}
-                  </div>
-                  <div className="text-sm text-gray-700 font-medium">Constant Growth Dividend Model</div>
-                  <div className="text-xs text-gray-600 mt-1">P = D₁ ÷ (r - g)</div>
+                <div className="text-lg font-medium text-gray-700 mb-1" aria-live="polite">
+                  {currentModel.name}
                 </div>
-                <div className="text-center p-4 bg-purple-50 rounded-lg">
-                  <div className="text-2xl font-bold text-purple-800">
-                    {isNaN(results.priceChangingGrowth) ? "Invalid" : fmtUSD(results.priceChangingGrowth)}
-                  </div>
-                  <div className="text-sm text-gray-700 font-medium">Changing Growth Dividend Model</div>
-                  <div className="text-xs text-gray-600 mt-1">High growth + Terminal value</div>
-                </div>
+                <div className="text-sm text-gray-600">{currentModel.formula}</div>
               </div>
             </section>
 
-            {/* Accessible Data Table (Screen Reader Only) */}
-            <div className="sr-only">
-              <h3>Cash Flow Data Table</h3>
-              <p>
-                Annual dividend projections and initial investment costs for each valuation model over 10 years. 
-                Constant Dividend model (solid bars) shows constant dividends.
-                Constant Growth Dividend model (striped pattern) shows growing dividends.
-                Changing Growth Dividend model (dotted pattern) shows high initial growth then sustainable growth.
-              </p>
-              <table>
-                <caption>Dividend cash flows by year and model</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Year</th>
-                    <th scope="col" className="text-right">Constant Dividend</th>
-                    <th scope="col" className="text-right">Constant Growth Dividend</th>
-                    <th scope="col" className="text-right">Changing Growth Dividend</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.data.map(row => (
-                    <tr key={row.year}>
-                      <th scope="row">{row.year === 0 ? "Initial Investment" : `Year ${row.year}`}</th>
-                      <td className="text-right">
-                        {row.year === 0 
-                          ? fmtUSD(Math.abs(row.constDiv)) + " (outflow)"
-                          : fmtUSD(row.constDiv)
-                        }
-                      </td>
-                      <td className="text-right">
-                        {row.constGrow === null 
-                          ? "Invalid model" 
-                          : row.year === 0 
-                            ? fmtUSD(Math.abs(row.constGrow)) + " (outflow)"
-                            : fmtUSD(row.constGrow)
-                        }
-                      </td>
-                      <td className="text-right">
-                        {row.changingGrowth === null 
-                          ? "Invalid model" 
-                          : row.year === 0 
-                            ? fmtUSD(Math.abs(row.changingGrowth)) + " (outflow)"
-                            : fmtUSD(row.changingGrowth)
-                        }
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Chart */}
+            {/* Chart with Model Toggle */}
             <section className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold mb-2">Equity Cash Flows (in US$) for Different Dividend Models</h2>
-              <p className="text-sm text-gray-600 mb-4">(Only the first 10 years are shown)</p>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Equity Cash Flows</h2>
+                
+                {/* Model Toggle Buttons with Enhanced Accessibility */}
+                <div className="inline-flex rounded-lg overflow-hidden border border-gray-200" role="group" aria-label="Select dividend model to display">
+                  <button 
+                    className={`px-3 py-2 text-sm ${selectedModel === "constant" ? "bg-blue-50 text-blue-600 border-blue-200" : "bg-white text-gray-700"}`} 
+                    onClick={() => setSelectedModel("constant")}
+                    aria-pressed={selectedModel === "constant"}
+                    aria-controls="dividend-chart"
+                    aria-describedby="constant-model-desc"
+                  >
+                    Constant
+                  </button>
+                  <button 
+                    className={`px-3 py-2 text-sm border-l ${selectedModel === "growth" ? "bg-green-50 text-green-600 border-green-200" : "bg-white text-gray-700 border-gray-200"}`} 
+                    onClick={() => setSelectedModel("growth")}
+                    aria-pressed={selectedModel === "growth"}
+                    aria-controls="dividend-chart"
+                    aria-describedby="growth-model-desc"
+                  >
+                    Growth
+                  </button>
+                  <button 
+                    className={`px-3 py-2 text-sm border-l ${selectedModel === "changing" ? "bg-purple-50 text-purple-600 border-purple-200" : "bg-white text-gray-700 border-gray-200"}`} 
+                    onClick={() => setSelectedModel("changing")}
+                    aria-pressed={selectedModel === "changing"}
+                    aria-controls="dividend-chart"
+                    aria-describedby="changing-model-desc"
+                  >
+                    Changing
+                  </button>
+                </div>
+              </div>
               
-              {/* Clean Legend */}
-              <div className="mb-4 flex flex-wrap gap-6 justify-center text-sm">
-                <span className="inline-flex items-center">
-                  <span className="w-4 h-4 bg-blue-600 mr-2 rounded"></span>
-                  <span className="font-medium">Constant Dividend</span>
-                </span>
-                <span className="inline-flex items-center">
-                  <span className="w-4 h-4 bg-green-600 mr-2 rounded"></span>
-                  <span className="font-medium">Constant Growth Dividend</span>
-                </span>
-                <span className="inline-flex items-center">
-                  <span className="w-4 h-4 bg-purple-600 mr-2 rounded"></span>
-                  <span className="font-medium">Changing Growth Dividend</span>
-                </span>
+              <p className="text-sm text-gray-600 mb-4" aria-live="polite">
+                Showing: <strong>{currentModel.name}</strong> - {currentModel.description}
+              </p>
+
+              {/* Live region for model changes */}
+              <div className="sr-only" aria-live="assertive" aria-atomic="true">
+                Chart updated to display {currentModel.name} model showing {isFinite(getCurrentPrice()) ? fmtUSD(getCurrentPrice()) : "invalid"} valuation.
               </div>
 
-              <div className="h-[600px] w-full" 
+              {/* Hidden model descriptions for screen readers */}
+              <div className="sr-only">
+                <p id="constant-model-desc">Constant Dividend Model: {MODEL_CONFIG.constant.description}</p>
+                <p id="growth-model-desc">Constant Growth Dividend Model: {MODEL_CONFIG.growth.description}</p>
+                <p id="changing-model-desc">Changing Growth Dividend Model: {MODEL_CONFIG.changing.description}</p>
+              </div>
+
+              {/* Accessible Data Table (Screen Reader Only) */}
+              <div className="sr-only">
+                <h3>Cash Flow Data for {currentModel.name}</h3>
+                <p>
+                  Annual dividend projections and initial investment cost for the {currentModel.name.toLowerCase()} over 10 years.
+                  Year 0 shows the initial investment outflow. Subsequent years show dividend inflows.
+                </p>
+                <table>
+                  <caption>Dividend cash flows by year for {currentModel.name}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Year</th>
+                      <th scope="col" className="text-right">Cash Flow</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results.data.map(row => {
+                      const value = row[currentModel.dataKey];
+                      return (
+                        <tr key={row.year}>
+                          <th scope="row">{row.year === 0 ? "Initial Investment" : `Year ${row.year}`}</th>
+                          <td className="text-right">
+                            {value === null 
+                              ? "Invalid model" 
+                              : row.year === 0 
+                                ? fmtUSD(Math.abs(value)) + " (outflow)"
+                                : fmtUSD(value)
+                            }
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Chart Title */}
+              <div className="text-left text-sm text-gray-600 mb-2 font-medium">
+                Cash Flow ($)
+              </div>
+
+              <div id="dividend-chart" className="h-[500px] w-full" 
                    role="img" 
                    aria-labelledby="chart-title" 
                    aria-describedby="chart-description">
                 
                 <div className="sr-only">
+                  <p id="chart-title">{currentModel.name} Cash Flow Chart</p>
                   <p id="chart-description">
-                    Bar chart showing dividend cash flows over 10 years. Year 0 shows negative initial investment costs. 
-                    Subsequent years show growing dividend payments for each model. 
-                    For each year, bars appear in consistent order from left to right:
-                    First bar (blue): Constant Dividend model showing constant {fmtUSD(D0)} dividends. 
-                    Second bar (green): Constant Growth Dividend model showing dividends growing at {gConst}% annually. 
-                    Third bar (purple): Changing Growth Dividend model showing {gShort}% growth for {shortYears} years, then {gLong}% thereafter.
+                    Bar chart showing dividend cash flows for the {currentModel.name.toLowerCase()} over 10 years. 
+                    Year 0 shows the negative initial investment cost of {isFinite(getCurrentPrice()) ? fmtUSD(Math.abs(getCurrentPrice())) : "invalid amount"}. 
+                    Subsequent years show dividend inflows. 
+                    {selectedModel === "constant" && `All dividend years show constant ${fmtUSD(D0)} payments.`}
+                    {selectedModel === "growth" && `Dividends grow at ${gConst}% annually.`}
+                    {selectedModel === "changing" && `Dividends grow at ${gShort}% for the first ${shortYears} years, then ${gLong}% thereafter.`}
                   </p>
                 </div>
                 
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={results.data} margin={{ top: 120, right: 30, left: 20, bottom: 60 }}>
+                  <BarChart data={results.data} margin={{ top: 60, right: 30, left: 50, bottom: 60 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="yearLabel" label={{ value: 'Years', position: 'insideBottom', offset: -5 }} />
-                    <YAxis tickFormatter={fmtUSD} />
+                    <XAxis 
+                      dataKey="yearLabel" 
+                      label={{ value: 'Years', position: 'insideBottom', offset: -5 }} 
+                    />
+                    <YAxis 
+                      tickFormatter={fmtUSD}
+                    />
                     <Tooltip 
-                      formatter={(value, name) => [value ? fmtUSD(Math.abs(value)) : 'Invalid', name]}
+                      formatter={(value) => [value ? fmtUSD(Math.abs(value)) : 'Invalid', currentModel.name]}
                       labelFormatter={(label) => label === "0" ? "Initial Investment" : `Year ${label}`}
                     />
                     
-                    <Bar dataKey="constDiv" name="Constant Dividend" fill="#2563eb">
+                    <Bar dataKey={currentModel.dataKey} name={currentModel.name} fill={currentModel.color}>
                       <LabelList 
-                        dataKey="constDiv"
+                        dataKey={currentModel.dataKey}
                         content={(props) => {
-                          const { x, width, value } = props;
-                          if (value === null) return null;
+                          const { x, width, value, y } = props;
+                          if (value === null || Math.abs(value) < 0.01) return null;
+                          
+                          const isNegative = value < 0;
+                          const labelY = isNegative ? y + 30 : y - 10;
                           
                           return (
                             <text 
                               x={x + width/2} 
-                              y={30}
+                              y={labelY}
                               textAnchor="middle"
-                              fill="#1e3a8a"
-                              fontSize="10"
+                              fill={currentModel.color}
+                              fontSize="11"
                               fontWeight="bold"
-                              transform={`rotate(-15 ${x + width/2} 10)`}
                             >
-                              {fmtUSD(value)}
-                            </text>
-                          );
-                        }}
-                      />
-                    </Bar>
-                    
-                    <Bar dataKey="constGrow" name="Constant Growth Dividend" fill="#16a34a">
-                      <LabelList 
-                        dataKey="constGrow"
-                        content={(props) => {
-                          const { x, width, value } = props;
-                          if (value === null) return null;
-                          
-                          return (
-                            <text 
-                              x={x + width/2} 
-                              y={50}
-                              textAnchor="middle"
-                              fill="#047857"
-                              fontSize="10"
-                              fontWeight="bold"
-                              transform={`rotate(-15 ${x + width/2} 30)`}
-                            >
-                              {fmtUSD(value)}
-                            </text>
-                          );
-                        }}
-                      />
-                    </Bar>
-                    
-                    <Bar dataKey="changingGrowth" name="Changing Growth Dividend" fill="#9333ea">
-                      <LabelList 
-                        dataKey="changingGrowth"
-                        content={(props) => {
-                          const { x, width, value } = props;
-                          if (value === null) return null;
-                          
-                          return (
-                            <text 
-                              x={x + width/2} 
-                              y={70}
-                              textAnchor="middle"
-                              fill="#6b21a8"
-                              fontSize="10"
-                              fontWeight="bold"
-                              transform={`rotate(-15 ${x + width/2} 50)`}
-                            >
-                              {fmtUSD(value)}
+                              {isNegative ? `(${fmtUSD(Math.abs(value))})` : fmtUSD(value)}
                             </text>
                           );
                         }}
@@ -401,14 +407,7 @@ export default function AccessibleDividendCalculator() {
                 </ResponsiveContainer>
               </div>
 
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <h3 className="font-semibold text-sm mb-2">Model Explanations:</h3>
-                <div className="text-xs text-gray-700 space-y-2">
-                  <p><strong>Constant Dividend Model (■):</strong> Assumes dividends remain constant. Appropriate for mature companies with stable payouts.</p>
-                  <p><strong>Constant Growth Dividend Model (▦):</strong> Assumes constant dividend growth rate. Requires growth rate less than required return.</p>
-                  <p><strong>Changing Growth Dividend Model (●):</strong> Assumes high growth initially, then lower sustainable growth. More realistic for many companies.</p>
-                </div>
-              </div>
+
             </section>
           </div>
         </div>
