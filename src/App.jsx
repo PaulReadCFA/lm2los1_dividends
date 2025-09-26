@@ -10,21 +10,51 @@ import {
   LabelList,
 } from "recharts";
 
-const fmtUSD = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(x);
+// ==============
+// Helper components
+// ==============
 
-// Accessible input component following required patterns
+// Accessible tooltip component
+const HelpTooltip = ({ id, text }) => {
+  const [visible, setVisible] = React.useState(false);
+
+  return (
+    <span className="relative inline-block ml-1">
+      <button
+        type="button"
+        className="w-4 h-4 rounded-full bg-gray-200 text-gray-700 text-xs font-bold 
+                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+        aria-describedby={visible ? `${id}-help` : undefined}
+        aria-label="Help information"
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+      >
+        ?
+      </button>
+      {visible && (
+        <span
+          id={`${id}-help`}
+          role="tooltip"
+          className="absolute left-5 top-1 z-10 w-56 p-2 text-xs text-white bg-gray-800 
+                     rounded shadow-lg"
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+};
+
 const FormField = ({ id, label, error, helpText, required, children }) => (
   <div className="mb-4">
-    <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+    <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
       {label}
       {required && <span className="text-red-500 ml-1" aria-label="required">*</span>}
+      {helpText && <HelpTooltip id={id} text={helpText} />}
     </label>
     {children}
-    {helpText && (
-      <p id={`${id}-help`} className="mt-1 text-xs text-gray-600">
-        {helpText}
-      </p>
-    )}
     {error && (
       <div id={`${id}-error`} className="mt-1 text-xs text-red-600" role="alert">
         {error}
@@ -32,6 +62,12 @@ const FormField = ({ id, label, error, helpText, required, children }) => (
     )}
   </div>
 );
+
+
+const fmtUSD = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(x);
+
+// Accessible input component following required patterns
+
 
 const NumericInput = ({ id, value, onChange, min, max, step = 0.01, prefix = "", suffix = "", error, helpText }) => {
   const describedBy = [
@@ -483,29 +519,60 @@ export default function AccessibleDividendCalculator() {
           <h2 className="text-lg font-semibold mb-4">Model Parameters</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            <FormField id="current-dividend" label="Current Dividend (D₀)" helpText="Most recent annual dividend payment per share" required error={results.errors.D0}>
-              <NumericInput id="current-dividend" value={D0} onChange={setD0} min={0.01} max={1000} step={0.1} prefix="$" />
-            </FormField>
-            
-            <FormField id="required-return" label="Required Return" helpText="Investor's minimum acceptable rate of return" required error={results.errors.required}>
-              <NumericInput id="required-return" value={req} onChange={setReq} min={0.1} max={50} step={0.1} suffix="%" />
-            </FormField>
-            
-            <FormField id="constant-growth" label="Constant Growth Rate" helpText="Expected annual dividend growth rate" error={results.errors.gConst}>
-              <NumericInput id="constant-growth" value={gConst} onChange={setGConst} min={-10} max={25} step={0.1} suffix="%" />
-            </FormField>
-            
-            <FormField id="short-term-growth" label="Short-term Growth Rate" helpText="Higher growth rate for initial years">
-              <NumericInput id="short-term-growth" value={gShort} onChange={setGShort} min={-10} max={50} step={0.1} suffix="%" />
-            </FormField>
-            
-            <FormField id="long-term-growth" label="Long-term Growth Rate" helpText="Sustainable growth rate after high-growth period" error={results.errors.gLong}>
-              <NumericInput id="long-term-growth" value={gLong} onChange={setGLong} min={-5} max={15} step={0.1} suffix="%" />
-            </FormField>
-            
-            <FormField id="high-growth-years" label="High Growth Period (Years)" helpText="Number of years of high growth before transitioning">
-              <NumericInput id="high-growth-years" value={shortYears} onChange={setShortYears} min={1} max={20} step={1} />
-            </FormField>
+<FormField 
+  id="current-dividend" 
+  label="Current Dividend (D₀)" 
+  helpText="Most recent annual dividend payment per share" 
+  required 
+  error={results.errors.D0}
+>
+  <NumericInput id="current-dividend" value={D0} onChange={setD0} min={0.01} max={1000} step={0.1} prefix="$" />
+</FormField>
+
+<FormField 
+  id="required-return" 
+  label="Required Return" 
+  helpText="Investor's minimum acceptable rate of return" 
+  required 
+  error={results.errors.required}
+>
+  <NumericInput id="required-return" value={req} onChange={setReq} min={0.1} max={50} step={0.1} suffix="%" />
+</FormField>
+
+<FormField 
+  id="constant-growth" 
+  label="Constant Growth Rate" 
+  helpText="Expected annual dividend growth rate" 
+  error={results.errors.gConst}
+>
+  <NumericInput id="constant-growth" value={gConst} onChange={setGConst} min={-10} max={25} step={0.1} suffix="%" />
+</FormField>
+
+<FormField 
+  id="short-term-growth" 
+  label="Short-term Growth Rate" 
+  helpText="Higher growth rate for initial years"
+>
+  <NumericInput id="short-term-growth" value={gShort} onChange={setGShort} min={-10} max={50} step={0.1} suffix="%" />
+</FormField>
+
+<FormField 
+  id="long-term-growth" 
+  label="Long-term Growth Rate" 
+  helpText="Sustainable growth rate after high-growth period" 
+  error={results.errors.gLong}
+>
+  <NumericInput id="long-term-growth" value={gLong} onChange={setGLong} min={-5} max={15} step={0.1} suffix="%" />
+</FormField>
+
+<FormField 
+  id="high-growth-years" 
+  label="High Growth Period (Years)" 
+  helpText="Number of years of high growth before transitioning"
+>
+  <NumericInput id="high-growth-years" value={shortYears} onChange={setShortYears} min={1} max={20} step={1} />
+</FormField>
+
           </div>
         </section>
       </div>
